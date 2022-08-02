@@ -1,0 +1,59 @@
+#!/usr/bin/env python
+
+from Pegasus.DAX3 import *
+import sys
+import os
+
+if len(sys.argv) != 2:
+        print("Usage: %s PEGASUS_HOME" % (sys.argv[0]))
+        sys.exit(1)
+
+# Create a abstract dag
+hand_model = ADAG("hand_model")
+
+# Add input file to the DAX-level replica catalog
+a = File("f.a")
+a.addPFN(PFN("file://" + os.getcwd() + "/f.a", "local"))
+hand_model.addFile(a)
+
+#Add input file to the DAX-level replica catalog
+dem = File("3083_5_9_013_041.tif")
+dem.addPFN(PFN("file://" + os.getcwd() + "/3083_5_9_013_041.tif", "local"))
+hand_model.addFile(dem)
+
+e_pyd8 = Executable(namespace="hand_model", name="pyd8", version="main", installed=False)
+e_pyd8.addPFN(PFN("file://" + os.getcwd() + "", "local"))
+hand_model.addExecutable(e_pyd8)
+
+e_pyhand = Executable(namespace="hand_model", name="pyhand", version="main", installed=False)
+e_pyhand.addPFN(PFN("file://" + os.getcwd() + "", "local"))
+hand_model.addExecutable(e_pyhand)
+
+# Add left Findrange job
+pyd8 = Job(namespace="hand_model", name="pyd8", version="main")
+d8 = File("d8.tif")
+pyd8.addArguments("-a pyd8","-T5","-i",dem,"-o",d8)
+pyd8.uses(dem, link=Link.INPUT)
+pyd8.uses(d8, link=Link.OUTPUT)
+# required resources for the job
+pyd8.addProfile(Profile(Namespace.PEGASUS, key="nodes", value="1"))
+pyd8.addProfile(Profile(Namespace.PEGASUS, key="cores", value="4"))
+hand_model.addJob(pyd8)
+
+
+# Add left Findrange job
+pyhand = Job(namespace="hand_model", name="pyhand", version="main")
+hand = File("hand.tif")
+pyhand.addArguments("-a pyhand","-T5","-i",dem,d8,"-o",hand)
+pyhand.uses(dem, link=Link.INPUT)
+pyhand.uses(d8, link=Link.INPUT)
+pyhand.uses(hand, link=Link.OUTPUT)
+# required resources for the job
+pyhand.addProfile(Profile(Namespace.PEGASUS, key="nodes", value="1"))
+pyhand.addProfile(Profile(Namespace.PEGASUS, key="cores", value="4"))
+hand_model.addJob(pyhand)
+
+# Add control-flow dependencies
+hand_model.addDependency(Dependency(parent=pyd8, child=pyhand))
+#Write the DAX to stdout
+hand_model.writeXML(sys.stdout)
